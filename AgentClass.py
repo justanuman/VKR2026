@@ -19,7 +19,7 @@ class BayesianAgent:
     def observation(self, observations_list):
         self.observations.extend(observations_list)
     
-    def bayesian_update(self, signal, likelihood_true, likelihood_false):
+    def bayesian_update(self, signal, likelihood_true=0.5, likelihood_false=0.5):
         """
         Apply Bayesian update to priors given a signal.
         
@@ -62,13 +62,13 @@ class BayesianAgent:
         
         # K-level 0: Use only private signal
         if self.k_level == 0:
-            current_belief = self.bayesian_update(self.private_signal)
+            current_belief = self.bayesian_update(self.private_signal,0.5,0.5)
             decision = current_belief[0] > current_belief[1]
             
         # K-level 1: Use private signal and think others use only private signals
         elif self.k_level == 1:
             # Start with private signal
-            current_belief = self.bayesian_update(self.private_signal)
+            current_belief = self.bayesian_update(self.private_signal,0.5,0.5)
             
             # Update with observations (assuming they are raw signals)
             for obs in self.observations:
@@ -84,11 +84,11 @@ class BayesianAgent:
             for obs in self.observations:
                 # Simulate what a level-1 agent would believe given this observation
                 level1_agent = BayesianAgent(obs, 1, self.priors.copy())
-                level1_belief = level1_agent.bayesian_update(obs)
+                level1_belief = level1_agent.bayesian_update(obs,0.5,0.5)
                 level1_beliefs.append(level1_belief[0] > 0.5)  # Their decision
             
             # Update belief using level-1 agents' decisions as sophisticated signals
-            current_belief = self.bayesian_update(self.private_signal)
+            current_belief = self.bayesian_update(self.private_signal,0.5,0.5)
             for l1_decision in level1_beliefs:
                 current_belief = self.bayesian_update(l1_decision, 0.6, 0.6)  # Weaker signal since it's processed
                 self.priors = current_belief
