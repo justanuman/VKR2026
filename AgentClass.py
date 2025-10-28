@@ -1,125 +1,161 @@
-import numpy as np
+import math
 
-class BayesianAgent:
-    def __init__(self, private_signal, k_level, priors=None):
-        self.private_signal = private_signal
+class Agent:
+    def __init__(self, q_value, k_level, private_signal=None):
+        """
+        Initialize the agent.
+        
+        Args:
+            q_value (float): Probability of private signal being correct (between 0 and 1)
+            k_level (int): The agent's K-level (0, 1, or 2)
+            private_signal (bool, optional): The agent's private signal. If None, randomly generated.
+        """
+        self.q = q_value
         self.k_level = k_level
         self.observations = []
         
-        # Set priors - default to uniform if not provided
-        if priors is not None:
-            self.priors = priors.copy()
+        # Set private signal
+        if private_signal is None:
+            # Randomly generate private signal (50/50 chance)
+            self.private_signal = random.choice([True, False])
         else:
-            self.priors = [0.5, 0.5]  # [P(True), P(False)]
-        
-        # Normalize priors to sum to 1
-        total = sum(self.priors)
-        self.priors = [p / total for p in self.priors]
-    
+            self.private_signal = private_signal
+            
     def observation(self, observations_list):
-        self.observations.extend(observations_list)
-    
-    def bayesian_update(self, signal, likelihood_true=0.5, likelihood_false=0.5):
         """
-        Apply Bayesian update to priors given a signal.
+        Set observations from function input.
         
         Args:
-            signal (bool): The signal to incorporate
-            likelihood_true (float): P(signal=True | True state)
-            likelihood_false (float): P(signal=False | False state)
-            
-        Returns:
-            list: Updated posterior probabilities
+            observations_list (list of bool): List of Boolean observations from other agents
         """
-        # P(True) and P(False) from priors
-        p_true, p_false = self.priors
-        
-        if signal:
-            # If signal is True, use likelihoods for True state
-            posterior_true = p_true * likelihood_true
-            posterior_false = p_false * (1 - likelihood_false)
-        else:
-            # If signal is False, use likelihoods for False state
-            posterior_true = p_true * (1 - likelihood_true)
-            posterior_false = p_false * likelihood_false
-        
-        # Normalize
-        total = posterior_true + posterior_false
-        if total > 0:
-            return [posterior_true / total, posterior_false / total]
-        else:
-            return [0.5, 0.5]  # Default if division by zero
+        self.observations = observations_list.copy()
     
     def action(self):
         """
-        Determine the supposed state of the world based on K-level reasoning.
-        Uses Bayesian updating with private signal and observations.
+        Determine the agent's action based on K-level.
         
         Returns:
-            bool: The agent's belief about the true state of the world
+            bool: The agent's decision (True or False)
         """
-        current_belief = self.priors.copy()
-        
-        # K-level 0: Use only private signal
         if self.k_level == 0:
-            current_belief = self.bayesian_update(self.private_signal,0.5,0.5)
-            decision = current_belief[0] > current_belief[1]
-            
-        # K-level 1: Use private signal and think others use only private signals
-        elif self.k_level == 1:
-            # Start with private signal
-            current_belief = self.bayesian_update(self.private_signal,0.5,0.5)
-            
-            # Update with observations (assuming they are raw signals)
-            for obs in self.observations:
-                current_belief = self.bayesian_update(obs)
-                self.priors = current_belief  # Update priors for sequential updating
-            
-            decision = current_belief[0] > current_belief[1]
-            
-        # K-level 2: Think that others are level-1 thinkers
-        elif self.k_level == 2:
-            # First, what would level-1 agents believe?
-            level1_beliefs = []
-            for obs in self.observations:
-                # Simulate what a level-1 agent would believe given this observation
-                level1_agent = BayesianAgent(obs, 1, self.priors.copy())
-                level1_belief = level1_agent.bayesian_update(obs,0.5,0.5)
-                level1_beliefs.append(level1_belief[0] > 0.5)  # Their decision
-            
-            # Update belief using level-1 agents' decisions as sophisticated signals
-            current_belief = self.bayesian_update(self.private_signal,0.5,0.5)
-            for l1_decision in level1_beliefs:
-                current_belief = self.bayesian_update(l1_decision, 0.6, 0.6)  # Weaker signal since it's processed
-                self.priors = current_belief
-                
-            decision = current_belief[0] > current_belief[1]
-            
-        # Higher K-levels: Recursive thinking
-        else:
-            # Start with private signal
-            current_belief = self.bayesian_update(self.private_signal)
-            
-            # For each observation, simulate what lower-level agents would believe
-            for obs in self.observations:
-                # Create agent with k_level-1
-                lower_agent = BayesianAgent(obs, self.k_level-1, self.priors.copy())
-                lower_belief = lower_agent.bayesian_update(obs)
-                lower_decision = lower_belief[0] > lower_belief[1]
-                
-                # Update based on the lower-level agent's decision
-                current_belief = self.bayesian_update(lower_decision, 0.55, 0.55)  # Even weaker signal
-                self.priors = current_belief
-                
-            decision = current_belief[0] > current_belief[1]
+            # K-level 0: Use private signal (or reverse if q < 0.5)
+            if self.q >= 0.5:
+                return self.private_signal
+            else:
+                return not self.private_signal
         
-        return decision
+        elif self.k_level == 1:
+            # K-level 1: Use Bayesian updating with observations
+            if not self.observations:
+                # If no observations, use private signal
+                if self.q >= 0.5:
+                    return self.private_signal
+                else:
+                    return not self.private_signal
+            
+            # Calculate probability of true state being True using Bayesian updating
+            prob_true = self._bayesian_update()
+            
+            # Return True if probability > 0.5, False otherwise
+            return prob_true > 0.5
+        
+        elif self.k_level == 2:
+            # K-level 2: Respond recursively to others
+            if not self.observations:
+                # If no observations, use private signal
+                if self.q >= 0.5:
+                    return self.private_signal
+                else:
+                    return not self.private_signal
+            
+            # For k-level 2, we consider what lower-level agents would do
+            # This is a simplified implementation - in practice, this would be more complex
+            # based on the specific recursive reasoning model
+            
+            # Count True and False actions in observations
+            true_count = sum(self.observations)
+            false_count = len(self.observations) - true_count
+            
+            # Simple heuristic: if majority of observations are True, return True
+            # In a more sophisticated implementation, this would involve
+            # modeling the reasoning of lower-level agents
+            if true_count > false_count:
+                return True
+            elif false_count > true_count:
+                return False
+            else:
+                # Tie breaker: use private signal
+                if self.q >= 0.5:
+                    return self.private_signal
+                else:
+                    return not self.private_signal
+        
+        else:
+            raise ValueError(f"Unsupported K-level: {self.k_level}")
     
-    def get_beliefs(self):
+    def _bayesian_update(self):
         """
-        Returns the current beliefs of the agent.
+        Calculate probability of true state being True using Bayesian updating.
         
         Returns:
-            list: Current probabilities [P(True), P(False)]
+            float: Probability that the true state is True
         """
-        return self.priors.copy()
+        if not self.observations:
+            # If no observations, prior is 0.5
+            prior = 0.5
+            # Update with private signal
+            if self.private_signal:
+                # P(state=True | signal=True) = P(signal=True | state=True) * P(state=True) / P(signal=True)
+                # P(signal=True) = P(signal=True | state=True) * P(state=True) + P(signal=True | state=False) * P(state=False)
+                #               = q * 0.5 + (1-q) * 0.5 = 0.5
+                posterior = (self.q * prior) / 0.5
+            else:
+                # P(state=True | signal=False) = P(signal=False | state=True) * P(state=True) / P(signal=False)
+                # P(signal=False) = 0.5
+                posterior = ((1 - self.q) * prior) / 0.5
+            return posterior
+        
+        # Start with uniform prior
+        prob_true = 0.5
+        
+        # Update probability based on each observation
+        for obs in self.observations:
+            if obs:
+                # If observation is True
+                # P(state=True | obs=True) = P(obs=True | state=True) * P(state=True) / P(obs=True)
+                # We assume the observation comes from an agent with q=0.6 (typical assumption)
+                # This could be parameterized if needed
+                q_other = 0.6
+                prob_obs_given_true = q_other
+                prob_obs_given_false = 1 - q_other
+                
+                prob_obs = prob_obs_given_true * prob_true + prob_obs_given_false * (1 - prob_true)
+                prob_true = (prob_obs_given_true * prob_true) / prob_obs
+            else:
+                # If observation is False
+                q_other = 0.6
+                prob_obs_given_true = 1 - q_other
+                prob_obs_given_false = q_other
+                
+                prob_obs = prob_obs_given_true * prob_true + prob_obs_given_false * (1 - prob_true)
+                prob_true = (prob_obs_given_true * prob_true) / prob_obs
+        
+        # Finally, update with private signal
+        if self.private_signal:
+            prob_signal_given_true = self.q
+            prob_signal_given_false = 1 - self.q
+            
+            prob_signal = prob_signal_given_true * prob_true + prob_signal_given_false * (1 - prob_true)
+            prob_true = (prob_signal_given_true * prob_true) / prob_signal
+        else:
+            prob_signal_given_true = 1 - self.q
+            prob_signal_given_false = self.q
+            
+            prob_signal = prob_signal_given_true * prob_true + prob_signal_given_false * (1 - prob_true)
+            prob_true = (prob_signal_given_true * prob_true) / prob_signal
+        
+        return prob_true
+    
+    def __str__(self):
+        """String representation of the agent."""
+        return f"Agent(q={self.q}, k_level={self.k_level}, private_signal={self.private_signal})"
