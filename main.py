@@ -1,5 +1,3 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import random
 from AgentClass import Agent
 
@@ -160,7 +158,7 @@ def main():
     # Set simulation parameters
     TRUE_STATE = True
     Q = 0.6  # Probability signal is correct
-    NUM_AGENTS = 10
+    NUM_AGENTS = 15
     
     print("INFORMATIONAL CASCADE SIMULATION")
     print("=" * 50)
@@ -190,10 +188,10 @@ def main():
     print("MULTIPLE SIMULATION RUNS (K-Level 1)")
     print("=" * 60)
     
-    num_simulations = 5
+    num_simulations = 3
     for i in range(num_simulations):
         print(f"\nSimulation Run {i+1}:")
-        simulate_cascade(true_state=TRUE_STATE, q=Q, k_level=1, num_agents=8)
+        simulate_cascade(true_state=TRUE_STATE, q=Q, k_level=1, num_agents=NUM_AGENTS)
 
 if __name__ == "__main__":
     main()
