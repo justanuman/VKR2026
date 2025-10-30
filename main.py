@@ -60,7 +60,7 @@ def simulate_cascade(true_state, q, k_level, num_agents=10):
             agent.observation(decisions)
         
         # Agent makes decision
-        decision = agent.action()
+        decision = agent.action(decisions)
         decisions.append(decision)
         
         # Check if decision is correct
