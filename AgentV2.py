@@ -144,7 +144,8 @@ class AgentV2:
             Updated probability
         """
         # Use signal_strength for private signals, assumed 0.6 for observations
-        q = self.signal_strength if not is_observation else 0.6
+        q = self.signal_strength 
+        #if not is_observation else 0.6
         
         if signal:  # Signal is True
             likelihood_true = q
